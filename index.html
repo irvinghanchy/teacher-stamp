@@ -297,6 +297,8 @@
         <div class="opts" id="fontOpts"></div>
       </div>
 
+      <!-- TODO: 可調整印章顏色 -->
+
       <div class="div"></div>
 
       <div class="field">
@@ -320,6 +322,22 @@
         <div class="slide-row">
           <input type="range" id="sTilt" min="0" max="100" value="40" step="5">
           <span class="slide-val"><span id="sTiltV">40</span>%</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="fl">行距</span>
+        <div class="slide-row">
+          <input type="range" id="sLineSpace" min="80" max="200" value="100" step="5">
+          <span class="slide-val"><span id="sLineSpaceV">100</span>%</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="fl">邊距</span>
+        <div class="slide-row">
+          <input type="range" id="sMargin" min="0" max="300" value="100" step="10">
+          <span class="slide-val"><span id="sMarginV">100</span>%</span>
         </div>
       </div>
 
@@ -357,11 +375,13 @@ const FONTS = [
 ];
 
 const FRAMES = [
-  { id: "rectangle", name: "矩框"   },
-  { id: "square", name: "方框"   },
-  { id: "circle", name: "圓框"   },
-  { id: "oval",   name: "橢圓框" },
-  { id: "none",   name: "無框"   },
+  { id: "rectangle",    name: "矩框"   },
+  { id: "square",       name: "方框"   },
+  { id: "stadium",      name: "長條形" },
+  { id: "circle",       name: "圓框"   },
+  { id: "oval",         name: "橢圓框" },
+  { id: "superellipse", name: "超橢圓" },
+  { id: "none",         name: "無框"   },
 ];
 
 const LAYOUTS = [
@@ -405,9 +425,11 @@ function slider(id, valId, unit, cb) {
   const val = document.getElementById(valId);
   el.addEventListener('input', () => { val.textContent = el.value; cb && cb(); });
 }
-slider('sSize',   'sSizeV',   'px', generate);
-slider('sEffect', 'sEffectV', '%',  generate);
-slider('sTilt',   'sTiltV',   '%',  generate);
+slider('sSize',      'sSizeV',      'px', generate);
+slider('sEffect',    'sEffectV',    '%',  generate);
+slider('sTilt',      'sTiltV',      '%',  generate);
+slider('sLineSpace', 'sLineSpaceV', '%',  generate);
+slider('sMargin',    'sMarginV',    '%',  generate);
 
 document.getElementById('stampText').addEventListener('input', generate);
 document.getElementById('genBtn').addEventListener('click', () => {
@@ -429,20 +451,24 @@ function generate(newSeed = false) {
 
   if (newSeed || lastSeed === 0) lastSeed = (Math.random() * 0xFFFFFF | 0) + 1;
 
-  const size   = +document.getElementById('sSize').value;
-  const effect = +document.getElementById('sEffect').value / 100;
-  const tilt   = +document.getElementById('sTilt').value / 100;
-  const font   = FONTS.find(f => f.id === st.font);
+  const size        = +document.getElementById('sSize').value;
+  const effect      = +document.getElementById('sEffect').value / 100;
+  const tilt        = +document.getElementById('sTilt').value / 100;
+  const lineSpacing = +document.getElementById('sLineSpace').value / 100;
+  const margin      = +document.getElementById('sMargin').value / 100;
+  const font        = FONTS.find(f => f.id === st.font);
 
   drawStamp(document.getElementById('stampCanvas'), {
     lines,
-    layout:   st.layout,
-    frame:    st.frame,
-    fontFam:  font.family,
+    layout:      st.layout,
+    frame:       st.frame,
+    fontFam:     font.family,
     size,
     effect,
     tilt,
-    seed:     lastSeed,
+    seed:        lastSeed,
+    lineSpacing,
+    margin,
   });
 }
 
@@ -450,31 +476,74 @@ function generate(newSeed = false) {
    核心渲染
    ================================================================ */
 
-function drawStamp(canvas, { lines, layout, frame, fontFam, size, effect, tilt, seed }) {
+function drawStamp(canvas, { lines, layout, frame, fontFam, size, effect, tilt, seed, lineSpacing, margin }) {
   /* ── Dimensions ─────────────────────────────────────── */
-  const maxLineLen = Math.max(...lines.map(l => l.length));
+  const maxLineLen = Math.max(...lines.map(l => [...l].length));
   const numLines   = lines.length;
 
-  // In horizontal mode: cols = maxLineLen, rows = numLines
-  // In vertical mode:   cols = numLines (columns), rows = maxLineLen
+  // cols / rows in logical grid
   const cols = layout === 'horizontal' ? maxLineLen : numLines;
   const rows = layout === 'horizontal' ? numLines   : maxLineLen;
 
-  const PRAT  = 0.13;                 // padding ratio
-  const PPAD  = size * PRAT;
+  // Padding ratio and base font size
+  const PRAT   = Math.min(0.45, 0.13 * margin);
   const maxDim = Math.max(cols, rows, 1);
-  let   fsize  = (size * (1 - PRAT * 2)) / maxDim;
+  let fsize    = (size * (1 - PRAT * 2)) / maxDim;
   fsize = Math.max(10, Math.min(fsize, 220));
 
-  let sW = fsize * cols + PPAD * 2;
-  let sH = fsize * rows + PPAD * 2;
+  const charSize = fsize * 0.83;
+
+  /* ── Measure actual character widths ─────────────────
+     Use a temporary off-screen canvas so we can measure
+     before we know the final stamp dimensions.          */
+  const tmpC = document.createElement('canvas');
+  const tmpX = tmpC.getContext('2d');
+  tmpX.font = `bold ${charSize}px ${fontFam}`;
+
+  // colWidths[c] = pixel width of the widest character in column c
+  let colWidths;
+  if (layout === 'horizontal') {
+    colWidths = new Array(cols).fill(0);
+    lines.forEach(line => {
+      [...line].forEach((ch, c) => {
+        colWidths[c] = Math.max(colWidths[c], tmpX.measureText(ch).width);
+      });
+    });
+  } else {
+    // vertical: each line becomes one column; width = widest char in that line
+    colWidths = lines.map(line => {
+      if (!line) return charSize;
+      let maxW = 0;
+      [...line].forEach(ch => { maxW = Math.max(maxW, tmpX.measureText(ch).width); });
+      return maxW || charSize;
+    });
+  }
+
+  // Fallback for empty cells
+  colWidths = colWidths.map(w => w || charSize * 0.5);
+
+  /* ── Accumulate column x-offsets ────────────────────── */
+  const colOffsets = [];
+  let xAcc = 0;
+  colWidths.forEach(w => { colOffsets.push(xAcc); xAcc += w; });
+
+  /* ── Row height (apply line-spacing) ────────────────── */
+  const rowH = fsize * lineSpacing;
+
+  /* ── Stamp canvas dimensions ────────────────────────── */
+  const contentW = colWidths.reduce((s, w) => s + w, 0);
+  const contentH = rowH * rows;
+  const PPAD     = size * 0.13 * margin;   // absolute padding in px
+
+  let sW = contentW + PPAD * 2;
+  let sH = contentH + PPAD * 2;
 
   if (frame === 'square' || frame === 'circle') {
     sW = sH = Math.max(sW, sH);
   }
 
   /* ── Canvas setup with rotation buffer ──────────────── */
-  const maxRotDeg = 4 * tilt;                    // max ±deg overall
+  const maxRotDeg = 4 * tilt;
   const rotAngle  = ((Math.random() * 2 - 1) * maxRotDeg) * (Math.PI / 180);
   const ROT_BUF   = 40;
 
@@ -496,15 +565,13 @@ function drawStamp(canvas, { lines, layout, frame, fontFam, size, effect, tilt, 
   ctx.lineWidth = fw;
   ctx.lineCap   = 'square';
 
-  /* Frame */
+  /* ── Frame ───────────────────────────────────────────── */
   switch (frame) {
-    case 'rectangle': {
-      ctx.strokeRect(fw / 2, fw / 2, sW - fw, sH - fw);
-      break;
-    }
+    case 'rectangle':
     case 'square':
       ctx.strokeRect(fw / 2, fw / 2, sW - fw, sH - fw);
       break;
+
     case 'circle': {
       const r = Math.min(sW, sH) / 2 - fw / 2;
       ctx.beginPath();
@@ -512,6 +579,7 @@ function drawStamp(canvas, { lines, layout, frame, fontFam, size, effect, tilt, 
       ctx.stroke();
       break;
     }
+
     case 'oval': {
       const rx = sW / 2 - fw / 2;
       const ry = sH / 2 - fw / 2;
@@ -520,28 +588,81 @@ function drawStamp(canvas, { lines, layout, frame, fontFam, size, effect, tilt, 
       ctx.stroke();
       break;
     }
+
+    /* ── 長條形：上下邊平行、左右邊為半圓 ── */
+    case 'stadium': {
+      // r = half the shorter dimension
+      const r = Math.min(sW, sH) / 2 - fw / 2;
+      if (sW >= sH) {
+        // Landscape: flat top/bottom, semicircles on left/right
+        const cx1 = r + fw / 2;          // centre of left semicircle
+        const cx2 = sW - r - fw / 2;     // centre of right semicircle
+        ctx.beginPath();
+        ctx.moveTo(cx1, fw / 2);          // top-left join
+        ctx.lineTo(cx2, fw / 2);          // top edge →
+        ctx.arc(cx2, sH / 2, r, -Math.PI / 2, Math.PI / 2);   // right cap ↓
+        ctx.lineTo(cx1, sH - fw / 2);    // bottom edge ←
+        ctx.arc(cx1, sH / 2, r, Math.PI / 2, 3 * Math.PI / 2); // left cap ↑
+        ctx.closePath();
+        ctx.stroke();
+      } else {
+        // Portrait: flat left/right, semicircles on top/bottom
+        const cy1 = r + fw / 2;
+        const cy2 = sH - r - fw / 2;
+        ctx.beginPath();
+        ctx.moveTo(fw / 2, cy1);
+        ctx.lineTo(fw / 2, cy2);
+        ctx.arc(sW / 2, cy2, r, Math.PI, 0);
+        ctx.lineTo(sW - fw / 2, cy1);
+        ctx.arc(sW / 2, cy1, r, 0, -Math.PI);
+        ctx.closePath();
+        ctx.stroke();
+      }
+      break;
+    }
+
+    /* ── 超橢圓：|x/a|^2.5 + |y/b|^2.5 = 1 ── */
+    case 'superellipse': {
+      const a   = sW / 2 - fw / 2;
+      const b   = sH / 2 - fw / 2;
+      const exp = 2 / 2.5;   // = 0.8
+      const N   = 400;
+      ctx.beginPath();
+      for (let i = 0; i <= N; i++) {
+        const t   = (i / N) * Math.PI * 2;
+        const cos = Math.cos(t);
+        const sin = Math.sin(t);
+        const x   = sW / 2 + a * Math.sign(cos) * Math.pow(Math.abs(cos), exp);
+        const y   = sH / 2 + b * Math.sign(sin) * Math.pow(Math.abs(sin), exp);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      break;
+    }
+
+    case 'none':
+      break;
   }
 
-  /* Text */
-  const charSize = fsize * 0.83;
+  /* ── Text ────────────────────────────────────────────── */
+  ctx.font         = `bold ${charSize}px ${fontFam}`;
   ctx.textBaseline = 'middle';
   ctx.textAlign    = 'center';
 
-  // Content area offset so text sits centred inside frame
-  const contentW = fsize * cols;
-  const contentH = fsize * rows;
-  const ox = (sW - contentW) / 2 + fsize / 2;
-  const oy = (sH - contentH) / 2 + fsize / 2;
+  // Content area: horizontally left-padded, vertically centred
+  const ox = PPAD;
+  const oy = (sH - contentH) / 2;
 
   const maxCharTilt = 0.055 * tilt;   // per-character tilt range
 
   if (layout === 'horizontal') {
     lines.forEach((line, row) => {
-      const y = oy + fsize * row;
+      const y = oy + rowH * row + rowH / 2;
       [...line].forEach((ch, col) => {
-        const x   = ox + fsize * col;
+        if (col >= colOffsets.length) return;
+        const x   = ox + colOffsets[col] + colWidths[col] / 2;
         const rot = (Math.random() * 2 - 1) * maxCharTilt;
-        ctx.font = `bold ${charSize}px ${fontFam}`;
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(rot);
@@ -550,13 +671,12 @@ function drawStamp(canvas, { lines, layout, frame, fontFam, size, effect, tilt, 
       });
     });
   } else {
-    // Vertical: each newline-separated segment = one column
     lines.forEach((line, col) => {
-      const x = ox + fsize * col;
+      if (col >= colOffsets.length) return;
+      const x = ox + colOffsets[col] + colWidths[col] / 2;
       [...line].forEach((ch, row) => {
-        const y   = oy + fsize * row;
+        const y   = oy + rowH * row + rowH / 2;
         const rot = (Math.random() * 2 - 1) * maxCharTilt;
-        ctx.font = `bold ${charSize}px ${fontFam}`;
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(rot);
