@@ -249,6 +249,73 @@
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+    /* ── Color swatches ─────────────────────── */
+    .opts-color { display: flex; flex-wrap: wrap; gap: .35rem; }
+    .opt-color {
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      padding: .3rem .55rem;
+      background: var(--g2);
+      border: 2px solid var(--g3);
+      color: var(--white);
+      font-family: inherit;
+      font-size: .78rem;
+      cursor: pointer;
+      transition: border-color .1s, background .1s, color .1s;
+      white-space: nowrap;
+    }
+    .opt-color:hover { border-color: var(--yellow); }
+    .opt-color.active {
+      background: var(--yellow);
+      border-color: var(--yellow);
+      color: var(--black);
+      font-weight: 700;
+    }
+    .opt-color .dot {
+      width: 12px; height: 12px;
+      flex-shrink: 0;
+      border: 1px solid rgba(255,255,255,.18);
+    }
+    .opt-color.active .dot { border-color: rgba(0,0,0,.25); }
+    /* Custom color row */
+    .color-custom-row {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      margin-top: .1rem;
+    }
+    .color-custom-row label {
+      font-size: .62rem;
+      font-weight: 700;
+      letter-spacing: .2em;
+      color: var(--yellow);
+      white-space: nowrap;
+    }
+    #customColor {
+      width: 36px; height: 28px;
+      padding: 0;
+      border: 2px solid var(--g3);
+      background: none;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    #customColor::-webkit-color-swatch-wrapper { padding: 2px; }
+    #customColor::-webkit-color-swatch { border: none; }
+    #customColorHex {
+      flex: 1;
+      background: var(--g2);
+      border: 2px solid var(--g3);
+      color: var(--white);
+      font-family: inherit;
+      font-size: .78rem;
+      padding: .25rem .4rem;
+      letter-spacing: .08em;
+      min-width: 0;
+      transition: border-color .12s;
+    }
+    #customColorHex:focus { outline: none; border-color: var(--yellow); }
+
     /* ── Responsive ─────────────────────────── */
     @media (max-width: 760px) {
       .main { grid-template-columns: 1fr; }
@@ -297,7 +364,15 @@
         <div class="opts" id="fontOpts"></div>
       </div>
 
-      <!-- TODO: 可調整印章顏色 -->
+      <div class="field">
+        <span class="fl">墨水顏色</span>
+        <div class="opts-color" id="colorOpts"></div>
+        <div class="color-custom-row">
+          <label for="customColor">自訂</label>
+          <input type="color" id="customColor" value="#CC1A1A">
+          <input type="text"  id="customColorHex" value="#CC1A1A" maxlength="7" spellcheck="false">
+        </div>
+      </div>
 
       <div class="div"></div>
 
@@ -389,13 +464,20 @@ const LAYOUTS = [
   { id: "vertical",   name: "從上至下" },
 ];
 
-const STAMP_COLOR = "#CC1A1A"; // 印泥顏色（可改為 "#1a1acc" 藍色等）
+const INK_COLORS = [
+  { id: "red",    name: "硃紅", hex: "#CC1A1A" },
+  { id: "blue",   name: "深藍", hex: "#1A3ACC" },
+  { id: "black",  name: "碳黑", hex: "#1C1C1C" },
+  // { id: "green",  name: "翠綠", hex: "#1A7A3C" },
+  { id: "purple", name: "靛紫", hex: "#5A1ACC" },
+  // { id: "brown",  name: "棕褐", hex: "#7A3A10" },
+];
 
 /* ================================================================
    狀態
    ================================================================ */
 
-const st = { layout: "horizontal", frame: "rectangle", font: FONTS[0].id };
+const st = { layout: "horizontal", frame: "rectangle", font: FONTS[0].id, color: "red" };
 
 /* ================================================================
    UI 建構
@@ -419,6 +501,50 @@ function buildOpts(id, items, key) {
 buildOpts('layoutOpts', LAYOUTS, 'layout');
 buildOpts('frameOpts',  FRAMES,  'frame');
 buildOpts('fontOpts',   FONTS,   'font');
+
+/* ── Colour swatches ── */
+function buildColorOpts() {
+  const wrap = document.getElementById('colorOpts');
+  INK_COLORS.forEach(ink => {
+    const b = document.createElement('button');
+    b.className = 'opt-color' + (st.color === ink.id ? ' active' : '');
+    b.dataset.id = ink.id;
+    // b.innerHTML = `<span class="dot" style="background:${ink.hex}"></span>${ink.name}`;
+    b.innerHTML = `${ink.name}`;
+    b.addEventListener('click', () => {
+      st.color = ink.id;
+      wrap.querySelectorAll('.opt-color').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      // Sync custom inputs to selected preset
+      document.getElementById('customColor').value    = ink.hex;
+      document.getElementById('customColorHex').value = ink.hex;
+      generate();
+    });
+    wrap.appendChild(b);
+  });
+}
+buildColorOpts();
+
+/* ── Custom colour inputs ── */
+function applyCustomColor(hex) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
+  st.color = 'custom';
+  document.getElementById('customColor').value    = hex;
+  document.getElementById('customColorHex').value = hex;
+  document.querySelectorAll('#colorOpts .opt-color').forEach(x => x.classList.remove('active'));
+  generate();
+}
+document.getElementById('customColor').addEventListener('input', e => {
+  applyCustomColor(e.target.value);
+});
+document.getElementById('customColorHex').addEventListener('input', e => {
+  applyCustomColor(e.target.value.trim());
+});
+document.getElementById('customColorHex').addEventListener('blur', e => {
+  // Auto-prepend # if missing
+  let v = e.target.value.trim();
+  if (/^[0-9a-fA-F]{6}$/.test(v)) applyCustomColor('#' + v);
+});
 
 function slider(id, valId, unit, cb) {
   const el  = document.getElementById(id);
@@ -458,6 +584,11 @@ function generate(newSeed = false) {
   const margin      = +document.getElementById('sMargin').value / 100;
   const font        = FONTS.find(f => f.id === st.font);
 
+  // Resolve current ink colour
+  const stampColor = st.color === 'custom'
+    ? document.getElementById('customColor').value
+    : (INK_COLORS.find(c => c.id === st.color)?.hex ?? '#CC1A1A');
+
   drawStamp(document.getElementById('stampCanvas'), {
     lines,
     layout:      st.layout,
@@ -469,6 +600,7 @@ function generate(newSeed = false) {
     seed:        lastSeed,
     lineSpacing,
     margin,
+    stampColor,
   });
 }
 
@@ -476,7 +608,7 @@ function generate(newSeed = false) {
    核心渲染
    ================================================================ */
 
-function drawStamp(canvas, { lines, layout, frame, fontFam, size, effect, tilt, seed, lineSpacing, margin }) {
+function drawStamp(canvas, { lines, layout, frame, fontFam, size, effect, tilt, seed, lineSpacing, margin, stampColor }) {
   /* ── Dimensions ─────────────────────────────────────── */
   const maxLineLen = Math.max(...lines.map(l => [...l].length));
   const numLines   = lines.length;
@@ -559,8 +691,8 @@ function drawStamp(canvas, { lines, layout, frame, fontFam, size, effect, tilt, 
   ctx.rotate(rotAngle);
   ctx.translate(-sW / 2, -sH / 2);
 
-  ctx.fillStyle   = STAMP_COLOR;
-  ctx.strokeStyle = STAMP_COLOR;
+  ctx.fillStyle   = stampColor;
+  ctx.strokeStyle = stampColor;
   const fw = Math.max(2, fsize * 0.085);
   ctx.lineWidth = fw;
   ctx.lineCap   = 'square';
