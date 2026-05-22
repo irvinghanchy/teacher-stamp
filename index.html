@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>老師印章產生器</title>
+  <link rel="stylesheet" href="webfont/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+  <style>
+    /* ── Reset ──────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Variables ──────────────────────────── */
+    :root {
+      --black:   #0d0d0d;
+      --white:   #f0f0f0;
+      --yellow:  #F5C518;
+      --yello-d: #c9a010;
+      --g1:      #181818;
+      --g2:      #242424;
+      --g3:      #333;
+      --g4:      #555;
+    }
+
+    /* ── Base ───────────────────────────────── */
+    body {
+      background: var(--black);
+      color: var(--white);
+      font-family: 'Courier New', 'Lucida Console', monospace;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ─────────────────────────────── */
+    .hdr {
+      background: var(--yellow);
+      color: var(--black);
+      padding: .75rem 1.5rem;
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      border-bottom: 4px solid var(--black);
+      flex-shrink: 0;
+    }
+    .hdr h1 {
+      font-size: clamp(.95rem, 2.8vw, 1.45rem);
+      font-weight: 900;
+      letter-spacing: .18em;
+    }
+    .hdr small {
+      font-size: .62rem;
+      opacity: .65;
+      letter-spacing: .14em;
+    }
+
+    /* ── Layout ─────────────────────────────── */
+    .main {
+      display: grid;
+      grid-template-columns: minmax(260px, 340px) 1fr;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── Controls ───────────────────────────── */
+    .ctrl {
+      background: var(--g1);
+      border-right: 3px solid var(--g3);
+      overflow-y: auto;
+    }
+    .ctrl-inner {
+      padding: 1.1rem 1.1rem 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.1rem;
+    }
+
+    /* ── Field ──────────────────────────────── */
+    .field { display: flex; flex-direction: column; gap: .4rem; }
+    .fl {
+      font-size: .62rem;
+      font-weight: 700;
+      letter-spacing: .25em;
+      text-transform: uppercase;
+      color: var(--yellow);
+    }
+
+    textarea {
+      background: var(--g2);
+      border: 2px solid var(--g3);
+      color: var(--white);
+      padding: .6rem .75rem;
+      /* font-family: 'Times New Roman', Times, 'PT Serif', '標楷體','DFKai-SB','BiauKai', 'TW-Kai-98_1', serif; */
+      font-size: 1.05rem;
+      resize: vertical;
+      min-height: 72px;
+      width: 100%;
+      line-height: 1.7;
+      transition: border-color .12s;
+    }
+    textarea:focus { outline: none; border-color: var(--yellow); }
+    textarea::placeholder { color: var(--g4); }
+
+    /* ── Option buttons ─────────────────────── */
+    .opts { display: flex; flex-wrap: wrap; gap: .35rem; }
+    .opt {
+      padding: .3rem .65rem;
+      background: var(--g2);
+      border: 2px solid var(--g3);
+      color: var(--white);
+      font-family: inherit;
+      font-size: .78rem;
+      cursor: pointer;
+      transition: border-color .1s, background .1s, color .1s;
+      white-space: nowrap;
+    }
+    .opt:hover { border-color: var(--yellow); }
+    .opt.active {
+      background: var(--yellow);
+      border-color: var(--yellow);
+      color: var(--black);
+      font-weight: 700;
+    }
+
+    /* ── Sliders ────────────────────────────── */
+    .slide-row {
+      display: flex;
+      align-items: center;
+      gap: .65rem;
+    }
+    input[type="range"] {
+      flex: 1;
+      accent-color: var(--yellow);
+      cursor: pointer;
+    }
+    .slide-val {
+      font-size: .78rem;
+      font-weight: 700;
+      color: var(--yellow);
+      min-width: 3.8em;
+      text-align: right;
+    }
+
+    /* ── Divider ────────────────────────────── */
+    .div { height: 2px; background: var(--g3); }
+
+    /* ── Buttons ────────────────────────────── */
+    .btn-gen {
+      background: var(--yellow);
+      border: none;
+      color: var(--black);
+      padding: .7rem 1rem;
+      font-family: inherit;
+      font-size: .85rem;
+      font-weight: 900;
+      letter-spacing: .18em;
+      cursor: pointer;
+      width: 100%;
+      transition: background .1s;
+    }
+    .btn-gen:hover { background: var(--yello-d); }
+    .btn-gen:active { transform: scale(.98); }
+
+    /* ── Preview panel ──────────────────────── */
+    .prev {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1.5rem;
+      gap: 1.25rem;
+      background: var(--g2);
+      position: relative;
+    }
+    .prev-tag {
+      position: absolute;
+      top: .7rem; left: 1rem;
+      font-size: .58rem;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--g4);
+    }
+
+    /* Checkerboard = transparency indicator */
+    .canvas-shell {
+      background:
+        linear-gradient(45deg, #d0d0d0 25%, transparent 25%),
+        linear-gradient(-45deg,#d0d0d0 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #d0d0d0 75%),
+        linear-gradient(-45deg,transparent 75%, #d0d0d0 75%);
+      background-size: 14px 14px;
+      background-position: 0 0, 0 7px, 7px -7px, -7px 0;
+      background-color: #ffffff;
+      padding: 1.5rem;
+      border: 3px solid var(--black);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      max-width: 100%;
+    }
+    #stampCanvas {
+      display: block;
+      max-width: min(100%, 480px);
+      max-height: 55vh;
+      image-rendering: crisp-edges;
+    }
+
+    /* ── Action buttons ─────────────────────── */
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .5rem;
+      width: 100%;
+      max-width: 440px;
+    }
+    .btn-act {
+      padding: .6rem .4rem;
+      background: transparent;
+      border: 2px solid var(--yellow);
+      color: var(--yellow);
+      font-family: inherit;
+      font-size: .72rem;
+      font-weight: 700;
+      letter-spacing: .13em;
+      cursor: pointer;
+      transition: all .1s;
+    }
+    .btn-act:hover { background: var(--yellow); color: var(--black); }
+    .btn-act:active { transform: scale(.97); }
+
+    /* ── Toast ──────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 1.75rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      background: var(--yellow);
+      color: var(--black);
+      padding: .45rem 1.4rem;
+      font-weight: 700;
+      font-size: .8rem;
+      letter-spacing: .1em;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s, transform .25s;
+      z-index: 99;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ── Responsive ─────────────────────────── */
+    @media (max-width: 760px) {
+      .main { grid-template-columns: 1fr; }
+      .ctrl { border-right: none; border-bottom: 3px solid var(--g3); }
+      .prev { padding: 1.5rem 1rem; min-height: 320px; }
+    }
+    @media (max-width: 420px) {
+      .hdr { flex-direction: column; gap: .2rem; }
+      .actions { grid-template-columns: 1fr; }
+      .canvas-shell { padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="hdr">
+  <h1>老師印章產生器</h1>
+  <small>TEACHER STAMP GENERATOR</small>
+</header>
+
+<div class="main">
+
+  <!-- ════ Controls ════ -->
+  <aside class="ctrl">
+    <div class="ctrl-inner">
+
+      <div class="field">
+        <span class="fl">印章文字</span>
+        <textarea id="stampText" placeholder="輸入文字&#10;換行可多行排列" rows="3">優良</textarea>
+      </div>
+
+      <div class="div"></div>
+
+      <div class="field">
+        <span class="fl">排列方式</span>
+        <div class="opts" id="layoutOpts"></div>
+      </div>
+
+      <div class="field">
+        <span class="fl">外框類型</span>
+        <div class="opts" id="frameOpts"></div>
+      </div>
+
+      <div class="field">
+        <span class="fl">字型</span>
+        <div class="opts" id="fontOpts"></div>
+      </div>
+
+      <div class="div"></div>
+
+      <div class="field">
+        <span class="fl">印章大小</span>
+        <div class="slide-row">
+          <input type="range" id="sSize" min="80" max="520" value="200" step="10">
+          <span class="slide-val"><span id="sSizeV">200</span>px</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="fl">蓋印效果強度</span>
+        <div class="slide-row">
+          <input type="range" id="sEffect" min="0" max="100" value="50" step="5">
+          <span class="slide-val"><span id="sEffectV">50</span>%</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="fl">歪斜強度</span>
+        <div class="slide-row">
+          <input type="range" id="sTilt" min="0" max="100" value="40" step="5">
+          <span class="slide-val"><span id="sTiltV">40</span>%</span>
+        </div>
+      </div>
+
+      <div class="div"></div>
+
+      <button class="btn-gen" id="genBtn">▶ 重新生成印章</button>
+
+    </div>
+  </aside>
+
+  <!-- ════ Preview ════ -->
+  <section class="prev">
+    <span class="prev-tag">預覽 PREVIEW — 去背透明 PNG</span>
+    <div class="canvas-shell">
+      <canvas id="stampCanvas"></canvas>
+    </div>
+    <div class="actions">
+      <button class="btn-act" id="copyBtn">⊕ 複製到剪貼簿</button>
+      <button class="btn-act" id="dlBtn">↓ 下載透明 PNG</button>
+    </div>
+  </section>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================================================================
+   設定區域：可直接修改 FONTS / FRAMES / LAYOUTS / STAMP_COLOR
+   ================================================================ */
+
+const FONTS = [
+  { id: "kaiti",  name: "標楷體", family: "'Times New Roman', Times, 'PT Serif', '標楷體', 'DFKai-SB', 'BiauKai', serif" },
+  { id: "mincho", name: "明體",   family: "'細明體', 'PMingLiU', 'MingLiU', serif" },
+];
+
+const FRAMES = [
+  { id: "rectangle", name: "矩框"   },
+  { id: "square", name: "方框"   },
+  { id: "circle", name: "圓框"   },
+  { id: "oval",   name: "橢圓框" },
+  { id: "none",   name: "無框"   },
+];
+
+const LAYOUTS = [
+  { id: "horizontal", name: "從左至右" },
+  { id: "vertical",   name: "從上至下" },
+];
+
+const STAMP_COLOR = "#CC1A1A"; // 印泥顏色（可改為 "#1a1acc" 藍色等）
+
+/* ================================================================
+   狀態
+   ================================================================ */
+
+const st = { layout: "horizontal", frame: "rectangle", font: FONTS[0].id };
+
+/* ================================================================
+   UI 建構
+   ================================================================ */
+
+function buildOpts(id, items, key) {
+  const wrap = document.getElementById(id);
+  items.forEach(item => {
+    const b = document.createElement('button');
+    b.className = 'opt' + (st[key] === item.id ? ' active' : '');
+    b.textContent = item.name;
+    b.addEventListener('click', () => {
+      st[key] = item.id;
+      wrap.querySelectorAll('.opt').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      generate();
+    });
+    wrap.appendChild(b);
+  });
+}
+buildOpts('layoutOpts', LAYOUTS, 'layout');
+buildOpts('frameOpts',  FRAMES,  'frame');
+buildOpts('fontOpts',   FONTS,   'font');
+
+function slider(id, valId, unit, cb) {
+  const el  = document.getElementById(id);
+  const val = document.getElementById(valId);
+  el.addEventListener('input', () => { val.textContent = el.value; cb && cb(); });
+}
+slider('sSize',   'sSizeV',   'px', generate);
+slider('sEffect', 'sEffectV', '%',  generate);
+slider('sTilt',   'sTiltV',   '%',  generate);
+
+document.getElementById('stampText').addEventListener('input', generate);
+document.getElementById('genBtn').addEventListener('click', () => {
+  generate(true); // force new random seed
+});
+document.getElementById('copyBtn').addEventListener('click', copyStamp);
+document.getElementById('dlBtn').addEventListener('click', downloadStamp);
+
+/* ================================================================
+   印章生成入口
+   ================================================================ */
+
+let lastSeed = 0;
+
+function generate(newSeed = false) {
+  const text  = document.getElementById('stampText').value;
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (!lines.length) return;
+
+  if (newSeed || lastSeed === 0) lastSeed = (Math.random() * 0xFFFFFF | 0) + 1;
+
+  const size   = +document.getElementById('sSize').value;
+  const effect = +document.getElementById('sEffect').value / 100;
+  const tilt   = +document.getElementById('sTilt').value / 100;
+  const font   = FONTS.find(f => f.id === st.font);
+
+  drawStamp(document.getElementById('stampCanvas'), {
+    lines,
+    layout:   st.layout,
+    frame:    st.frame,
+    fontFam:  font.family,
+    size,
+    effect,
+    tilt,
+    seed:     lastSeed,
+  });
+}
+
+/* ================================================================
+   核心渲染
+   ================================================================ */
+
+function drawStamp(canvas, { lines, layout, frame, fontFam, size, effect, tilt, seed }) {
+  /* ── Dimensions ─────────────────────────────────────── */
+  const maxLineLen = Math.max(...lines.map(l => l.length));
+  const numLines   = lines.length;
+
+  // In horizontal mode: cols = maxLineLen, rows = numLines
+  // In vertical mode:   cols = numLines (columns), rows = maxLineLen
+  const cols = layout === 'horizontal' ? maxLineLen : numLines;
+  const rows = layout === 'horizontal' ? numLines   : maxLineLen;
+
+  const PRAT  = 0.13;                 // padding ratio
+  const PPAD  = size * PRAT;
+  const maxDim = Math.max(cols, rows, 1);
+  let   fsize  = (size * (1 - PRAT * 2)) / maxDim;
+  fsize = Math.max(10, Math.min(fsize, 220));
+
+  let sW = fsize * cols + PPAD * 2;
+  let sH = fsize * rows + PPAD * 2;
+
+  if (frame === 'square' || frame === 'circle') {
+    sW = sH = Math.max(sW, sH);
+  }
+
+  /* ── Canvas setup with rotation buffer ──────────────── */
+  const maxRotDeg = 4 * tilt;                    // max ±deg overall
+  const rotAngle  = ((Math.random() * 2 - 1) * maxRotDeg) * (Math.PI / 180);
+  const ROT_BUF   = 40;
+
+  canvas.width  = Math.ceil(sW + ROT_BUF * 2);
+  canvas.height = Math.ceil(sH + ROT_BUF * 2);
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  /* ── Draw with rotation ──────────────────────────────── */
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(rotAngle);
+  ctx.translate(-sW / 2, -sH / 2);
+
+  ctx.fillStyle   = STAMP_COLOR;
+  ctx.strokeStyle = STAMP_COLOR;
+  const fw = Math.max(2, fsize * 0.085);
+  ctx.lineWidth = fw;
+  ctx.lineCap   = 'square';
+
+  /* Frame */
+  switch (frame) {
+    case 'rectangle': {
+      ctx.strokeRect(fw / 2, fw / 2, sW - fw, sH - fw);
+      break;
+    }
+    case 'square':
+      ctx.strokeRect(fw / 2, fw / 2, sW - fw, sH - fw);
+      break;
+    case 'circle': {
+      const r = Math.min(sW, sH) / 2 - fw / 2;
+      ctx.beginPath();
+      ctx.arc(sW / 2, sH / 2, r, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
+    case 'oval': {
+      const rx = sW / 2 - fw / 2;
+      const ry = sH / 2 - fw / 2;
+      ctx.beginPath();
+      ctx.ellipse(sW / 2, sH / 2, rx, ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
+  }
+
+  /* Text */
+  const charSize = fsize * 0.83;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign    = 'center';
+
+  // Content area offset so text sits centred inside frame
+  const contentW = fsize * cols;
+  const contentH = fsize * rows;
+  const ox = (sW - contentW) / 2 + fsize / 2;
+  const oy = (sH - contentH) / 2 + fsize / 2;
+
+  const maxCharTilt = 0.055 * tilt;   // per-character tilt range
+
+  if (layout === 'horizontal') {
+    lines.forEach((line, row) => {
+      const y = oy + fsize * row;
+      [...line].forEach((ch, col) => {
+        const x   = ox + fsize * col;
+        const rot = (Math.random() * 2 - 1) * maxCharTilt;
+        ctx.font = `bold ${charSize}px ${fontFam}`;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rot);
+        ctx.fillText(ch, 0, 0);
+        ctx.restore();
+      });
+    });
+  } else {
+    // Vertical: each newline-separated segment = one column
+    lines.forEach((line, col) => {
+      const x = ox + fsize * col;
+      [...line].forEach((ch, row) => {
+        const y   = oy + fsize * row;
+        const rot = (Math.random() * 2 - 1) * maxCharTilt;
+        ctx.font = `bold ${charSize}px ${fontFam}`;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rot);
+        ctx.fillText(ch, 0, 0);
+        ctx.restore();
+      });
+    });
+  }
+
+  ctx.restore();
+
+  /* ── Ink wear ─────────────────────────────────────────── */
+  if (effect > 0) applyInkWear(canvas, ctx, effect, seed);
+}
+
+/* ================================================================
+   印泥磨損效果（像素操作）
+   ================================================================ */
+
+function applyInkWear(canvas, ctx, strength, seed) {
+  const W  = canvas.width;
+  const H  = canvas.height;
+  const id = ctx.getImageData(0, 0, W, H);
+  const d  = id.data;
+
+  /* Fast deterministic LCG */
+  let s = (seed ^ 0x6F4A3C1E) >>> 0;
+  const rand = () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+
+  /* Coarse noise grid (large ink-patch variation) */
+  const BLOCK = Math.max(5, ((W + H) * 0.045) | 0);
+  const bW    = Math.ceil(W / BLOCK);
+  const bH    = Math.ceil(H / BLOCK);
+  const coarse = new Float32Array(bW * bH);
+  for (let i = 0; i < coarse.length; i++) coarse[i] = rand();
+
+  /* Medium noise grid */
+  const MBLOCK = Math.max(3, BLOCK >> 1);
+  const mW     = Math.ceil(W / MBLOCK);
+  const mH     = Math.ceil(H / MBLOCK);
+  const mid    = new Float32Array(mW * mH);
+  for (let i = 0; i < mid.length; i++) mid[i] = rand();
+
+  /* Fine noise: one value per pixel */
+  const fine = new Float32Array(W * H);
+  for (let i = 0; i < fine.length; i++) fine[i] = rand();
+
+  /* Thresholds */
+  const baseDropout = strength * 0.26;   // fine-grain dropout
+  const edgeBoost   = strength * 0.48;   // extra near edges
+  const patchAmp    = strength * 0.18;   // coarse patch influence
+
+  for (let pi = 0; pi < W * H; pi++) {
+    const a = d[(pi << 2) + 3];
+    if (a < 6) continue;
+
+    const x = pi % W;
+    const y = (pi / W) | 0;
+
+    /* Edge distance (0 = at edge, 1 = well inside) */
+    const ex = Math.min(x, W - 1 - x) / (W * 0.11);
+    const ey = Math.min(y, H - 1 - y) / (H * 0.11);
+    const edg = 1 - Math.min(1, Math.min(ex, ey));
+
+    /* Noise blend */
+    const cn  = coarse[((y / BLOCK | 0) * bW) + (x / BLOCK | 0)];
+    const mn  = mid   [((y / MBLOCK| 0) * mW) + (x / MBLOCK| 0)];
+    const fn  = fine[pi];
+
+    const thresh = baseDropout
+      + edg * edgeBoost
+      + (cn - 0.5) * patchAmp
+      + (mn - 0.5) * patchAmp * 0.45;
+
+    const i4 = pi << 2;
+    if (fn < thresh) {
+      d[i4 + 3] = 0;
+    } else if (fn < thresh + 0.07) {
+      /* Feathered dropout edge */
+      const t = (fn - thresh) / 0.07;
+      d[i4 + 3] = (a * t * t) | 0;
+    } else {
+      /* Subtle pressure variation */
+      const pv = 1 - strength * 0.12 * (1 - fn);
+      d[i4 + 3] = Math.min(255, (a * pv) | 0);
+    }
+  }
+
+  ctx.putImageData(id, 0, 0);
+}
+
+/* ================================================================
+   複製 & 下載
+   ================================================================ */
+
+async function copyStamp() {
+  const canvas = document.getElementById('stampCanvas');
+  try {
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    toast('已複製到剪貼簿！');
+  } catch (e) {
+    toast('瀏覽器不支援複製，請使用下載功能');
+  }
+}
+
+function downloadStamp() {
+  const canvas = document.getElementById('stampCanvas');
+  const a = document.createElement('a');
+  a.download = 'stamp.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+  toast('已下載！');
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+/* ================================================================
+   初始化
+   ================================================================ */
+
+generate(true);
+</script>
+</body>
+</html>
